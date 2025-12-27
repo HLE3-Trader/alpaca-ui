@@ -1,446 +1,153 @@
-// Centralized API helper with authentication
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.example.com';
-const AUTH_TOKEN = import.meta.env.VITE_AUTH_TOKEN || 'demo-token-12345';
+// Path B: UI talks ONLY to the secure Vercel proxy (no secrets in browser)
+const API_BASE =
+  (import.meta.env.VITE_API_BASE || 'https://alpaca-proxy-flame.vercel.app/api') + '/';
 
 interface ApiOptions extends RequestInit {
   params?: Record<string, string>;
 }
 
-async function apiRequest<T>(
-  endpoint: string,
-  options: ApiOptions = {}
-): Promise<T> {
+async function apiRequest<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options;
 
-  // Build URL with query parameters
-  const url = new URL(endpoint, API_BASE);
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+  const url = new URL(cleanEndpoint, API_BASE);
+
   if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.append(key, value);
-    });
+    Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
   }
 
-  // Add authentication header
   const headers = {
     'Content-Type': 'application/json',
-    'X-Auth-Token': AUTH_TOKEN,
     ...fetchOptions.headers,
   };
 
-  const response = await fetch(url.toString(), {
-    ...fetchOptions,
-    headers,
-  });
+  const response = await fetch(url.toString(), { ...fetchOptions, headers });
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    const text = await response.text();
+    throw new Error(text || `API Error: ${response.status} ${response.statusText}`);
   }
 
-  return await response.json();
+  return response.json();
 }
 
-// API methods
 export const api = {
-  // Account endpoint - fetches real account data
-  getAccount: async () => {
-    try {
-      return await apiRequest<any>('/account');
-    } catch (error) {
-      // Fallback to mock data
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            equity: 135482.50,
-            cash: 56520.75,
-            buying_power: 113041.50,
-          });
-        }, 400);
-      });
-    }
-  },
+  getAccount: async () => apiRequest<any>('/account'),
 
-  // Positions endpoint - fetches real positions data
   getPositions: async () => {
-    try {
-      return await apiRequest<any>('/positions');
-    } catch (error) {
-      // Fallback to mock data
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            positions: [
-              {
-                id: '1',
-                symbol: 'AAPL',
-                name: 'Apple Inc.',
-                quantity: 150,
-                avgPrice: 175.23,
-                currentPrice: 182.45,
-                market_value: 27367.50,
-                marketValue: 27367.50,
-                unrealized_pl: 1083.00,
-                unrealizedPL: 1083.00,
-                unrealizedPLPercent: 4.12,
-              },
-              {
-                id: '2',
-                symbol: 'MSFT',
-                name: 'Microsoft Corporation',
-                quantity: 75,
-                avgPrice: 338.92,
-                currentPrice: 342.15,
-                market_value: 25661.25,
-                marketValue: 25661.25,
-                unrealized_pl: 242.25,
-                unrealizedPL: 242.25,
-                unrealizedPLPercent: 0.95,
-              },
-              {
-                id: '3',
-                symbol: 'GOOGL',
-                name: 'Alphabet Inc.',
-                quantity: 100,
-                avgPrice: 142.18,
-                currentPrice: 139.87,
-                market_value: 13987.00,
-                marketValue: 13987.00,
-                unrealized_pl: -231.00,
-                unrealizedPL: -231.00,
-                unrealizedPLPercent: -1.63,
-              },
-              {
-                id: '4',
-                symbol: 'TSLA',
-                name: 'Tesla Inc.',
-                quantity: 50,
-                avgPrice: 245.67,
-                currentPrice: 238.92,
-                market_value: 11946.00,
-                marketValue: 11946.00,
-                unrealized_pl: -337.50,
-                unrealizedPL: -337.50,
-                unrealizedPLPercent: -2.75,
-              },
-            ],
-          });
-        }, 600);
-      });
-    }
+    const raw = await apiRequest<any>('/positions');
+    const list = Array.isArray(raw) ? raw : (raw.positions ?? []);
+
+    const positions = list.map((p: any, i: number) => {
+      const quantity = Number(p.quantity ?? p.qty ?? 0);
+      const avgPrice = Number(p.avgPrice ?? p.avg_price ?? p.avg_entry_price ?? 0);
+      const currentPrice = Number(p.currentPrice ?? p.current_price ?? 0);
+      const marketValue = Number(p.marketValue ?? p.market_value ?? (quantity * currentPrice) ?? 0);
+      const unrealizedPL = Number(p.unrealizedPL ?? p.unrealized_pl ?? 0);
+
+      const unrealizedPLPercent =
+        p.unrealizedPLPercent != null
+          ? Number(p.unrealizedPLPercent)
+          : p.unrealized_pl_percent != null
+            ? Number(p.unrealized_pl_percent)
+            : p.unrealized_plpc != null
+              ? Number(p.unrealized_plpc) * 100
+              : avgPrice && quantity
+                ? (unrealizedPL / (avgPrice * quantity)) * 100
+                : 0;
+
+      return {
+        id: p.id ?? p.asset_id ?? `pos-${i}`,
+        symbol: p.symbol ?? '',
+        name: p.name ?? p.symbol ?? '',
+        quantity,
+        avgPrice,
+        currentPrice,
+        marketValue,
+        unrealizedPL,
+        unrealizedPLPercent,
+      };
+    });
+
+    return { positions };
   },
 
-  // Risk endpoint - fetches real risk data
-  getRisk: async () => {
-    try {
-      return await apiRequest<any>('/risk');
-    } catch (error) {
-      // Fallback to mock data
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            max_order_notional: 50000,
-            max_position_pct: 25.0,
-          });
-        }, 400);
-      });
-    }
-  },
-
-  // Proposed trades endpoint
-  getProposedTrades: async () => {
-    try {
-      return await apiRequest<any>('/proposed-trades');
-    } catch (error) {
-      // Fallback to mock data
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            proposals: [
-              {
-                symbol: 'NVDA',
-                side: 'buy',
-                qty: 25,
-                est_price: 485.00,
-                reason: 'Strong momentum + sector rotation',
-              },
-              {
-                symbol: 'META',
-                side: 'sell',
-                qty: 30,
-                est_price: 345.00,
-                reason: 'Overbought RSI + resistance level',
-              },
-              {
-                symbol: 'AAPL',
-                side: 'hold',
-                qty: 150,
-                est_price: 182.45,
-                reason: 'Neutral technical indicators',
-              },
-              {
-                symbol: 'AMD',
-                side: 'buy',
-                qty: 100,
-                est_price: 142.35,
-                reason: 'Earnings beat expectations',
-              },
-            ],
-          });
-        }, 500);
-      });
-    }
-  },
-
-  // Approve a proposed trade
-  approveProposal: async (data: { symbol: string; side: string; qty: number; est_price: number }) => {
-    try {
-      return await apiRequest<any>('/approve', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-    } catch (error) {
-      // Fallback to mock success
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            success: true,
-            order_id: `ORDER-${Date.now()}`,
-            message: 'Order submitted successfully (simulated)',
-          });
-        }, 800);
-      });
-    }
-  },
-
-  // Orders endpoint
   getOrders: async () => {
-    try {
-      return await apiRequest<any>('/orders');
-    } catch (error) {
-      // Fallback to mock data
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            orders: [
-              {
-                id: '1001',
-                symbol: 'NVDA',
-                type: 'LIMIT',
-                side: 'BUY',
-                quantity: 25,
-                limitPrice: 485.00,
-                status: 'OPEN',
-                filled: 0,
-                timestamp: '2025-12-26T09:30:00Z',
-              },
-              {
-                id: '1002',
-                symbol: 'AMD',
-                type: 'MARKET',
-                side: 'SELL',
-                quantity: 100,
-                status: 'FILLED',
-                filled: 100,
-                avgFillPrice: 142.35,
-                timestamp: '2025-12-26T08:15:00Z',
-              },
-              {
-                id: '1003',
-                symbol: 'META',
-                type: 'STOP',
-                side: 'SELL',
-                quantity: 30,
-                stopPrice: 345.00,
-                status: 'OPEN',
-                filled: 0,
-                timestamp: '2025-12-26T07:45:00Z',
-              },
-            ],
-          });
-        }, 600);
-      });
-    }
+    const raw = await apiRequest<any>('/orders');
+    const list = Array.isArray(raw) ? raw : (raw.orders ?? []);
+
+    const orders = list.map((o: any) => {
+      const quantity = Number(o.quantity ?? o.qty ?? 0);
+      const filled = Number(o.filled ?? o.filled_qty ?? 0);
+
+      const type = String(o.type ?? o.order_type ?? '').toUpperCase();
+      const side = String(o.side ?? '').toUpperCase();
+
+      const rawStatus = String(o.status ?? '').toUpperCase();
+      const openLike = new Set(['NEW', 'ACCEPTED', 'PENDING_NEW', 'PARTIALLY_FILLED']);
+      const status = openLike.has(rawStatus) ? 'OPEN' : rawStatus;
+
+      const timestamp = o.filled_at ?? o.submitted_at ?? o.created_at ?? new Date().toISOString();
+
+      return {
+        id: String(o.id),
+        symbol: String(o.symbol),
+        type: type || '—',
+        side: side || '—',
+        quantity,
+        limitPrice: o.limit_price != null ? Number(o.limit_price) : undefined,
+        stopPrice: o.stop_price != null ? Number(o.stop_price) : undefined,
+        avgFillPrice: o.filled_avg_price != null ? Number(o.filled_avg_price) : undefined,
+        status,
+        filled,
+        timestamp: String(timestamp),
+      };
+    });
+
+    return { orders };
   },
 
-  // Orders with status filter
   getOrdersWithStatus: async (status: 'all' | 'open' | 'closed' = 'all') => {
-    try {
-      return await apiRequest<any>('/orders', {
-        params: { status },
-      });
-    } catch (error) {
-      // Fallback to mock data filtered by status
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          const allOrders = [
-            {
-              id: '1001',
-              symbol: 'NVDA',
-              type: 'LIMIT',
-              side: 'BUY',
-              quantity: 25,
-              filled: 0,
-              filled_qty: 0,
-              limitPrice: 485.00,
-              limit_price: 485.00,
-              status: 'OPEN',
-              created_at: '2025-12-26T09:30:00Z',
-              timestamp: '2025-12-26T09:30:00Z',
-            },
-            {
-              id: '1002',
-              symbol: 'AMD',
-              type: 'MARKET',
-              side: 'SELL',
-              quantity: 100,
-              filled: 100,
-              filled_qty: 100,
-              status: 'FILLED',
-              avgFillPrice: 142.35,
-              avg_fill_price: 142.35,
-              created_at: '2025-12-26T08:15:00Z',
-              timestamp: '2025-12-26T08:15:00Z',
-            },
-            {
-              id: '1003',
-              symbol: 'META',
-              type: 'STOP',
-              side: 'SELL',
-              quantity: 30,
-              filled: 0,
-              filled_qty: 0,
-              stopPrice: 345.00,
-              stop_price: 345.00,
-              status: 'OPEN',
-              created_at: '2025-12-26T07:45:00Z',
-              timestamp: '2025-12-26T07:45:00Z',
-            },
-            {
-              id: '1004',
-              symbol: 'AAPL',
-              type: 'LIMIT',
-              side: 'BUY',
-              quantity: 50,
-              filled: 50,
-              filled_qty: 50,
-              limitPrice: 180.00,
-              limit_price: 180.00,
-              status: 'FILLED',
-              avgFillPrice: 179.85,
-              avg_fill_price: 179.85,
-              created_at: '2025-12-26T06:00:00Z',
-              timestamp: '2025-12-26T06:00:00Z',
-            },
-            {
-              id: '1005',
-              symbol: 'TSLA',
-              type: 'STOP_LIMIT',
-              side: 'SELL',
-              quantity: 25,
-              filled: 0,
-              filled_qty: 0,
-              stopPrice: 240.00,
-              stop_price: 240.00,
-              limitPrice: 239.50,
-              limit_price: 239.50,
-              status: 'CANCELLED',
-              created_at: '2025-12-25T15:30:00Z',
-              timestamp: '2025-12-25T15:30:00Z',
-            },
-            {
-              id: '1006',
-              symbol: 'GOOGL',
-              type: 'MARKET',
-              side: 'BUY',
-              quantity: 75,
-              filled: 75,
-              filled_qty: 75,
-              status: 'FILLED',
-              avgFillPrice: 139.87,
-              avg_fill_price: 139.87,
-              created_at: '2025-12-25T14:20:00Z',
-              timestamp: '2025-12-25T14:20:00Z',
-            },
-          ];
+    const raw = await apiRequest<any>('/orders', { params: { status } });
+    const list = Array.isArray(raw) ? raw : (raw.orders ?? []);
 
-          let filteredOrders = allOrders;
-          
-          if (status === 'open') {
-            filteredOrders = allOrders.filter(o => o.status === 'OPEN');
-          } else if (status === 'closed') {
-            filteredOrders = allOrders.filter(o => ['FILLED', 'CANCELLED', 'REJECTED'].includes(o.status));
-          }
+    const orders = list.map((o: any) => {
+      const quantity = Number(o.quantity ?? o.qty ?? 0);
+      const filled = Number(o.filled ?? o.filled_qty ?? 0);
 
-          resolve({
-            orders: filteredOrders,
-          });
-        }, 500);
-      });
-    }
+      const type = String(o.type ?? o.order_type ?? '').toUpperCase();
+      const side = String(o.side ?? '').toUpperCase();
+
+      const rawStatus = String(o.status ?? '').toUpperCase();
+      const openLike = new Set(['NEW', 'ACCEPTED', 'PENDING_NEW', 'PARTIALLY_FILLED']);
+      const statusNorm = openLike.has(rawStatus) ? 'OPEN' : rawStatus;
+
+      const timestamp = o.filled_at ?? o.submitted_at ?? o.created_at ?? new Date().toISOString();
+
+      return {
+        id: String(o.id),
+        symbol: String(o.symbol),
+        type: type || '—',
+        side: side || '—',
+        quantity,
+        limitPrice: o.limit_price != null ? Number(o.limit_price) : undefined,
+        stopPrice: o.stop_price != null ? Number(o.stop_price) : undefined,
+        avgFillPrice: o.filled_avg_price != null ? Number(o.filled_avg_price) : undefined,
+        status: statusNorm,
+        filled,
+        timestamp: String(timestamp),
+      };
+    });
+
+    return { orders };
   },
 
-  // Watch list endpoint
-  getWatchList: async () => {
-    try {
-      return await apiRequest<any>('/watchlist');
-    } catch (error) {
-      // Fallback to mock data
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            symbols: [
-              {
-                symbol: 'SPY',
-                name: 'SPDR S&P 500 ETF',
-                price: 478.25,
-                change: 2.45,
-                changePercent: 0.51,
-                volume: 52341234,
-              },
-              {
-                symbol: 'QQQ',
-                name: 'Invesco QQQ Trust',
-                price: 412.89,
-                change: -1.23,
-                changePercent: -0.30,
-                volume: 28934521,
-              },
-              {
-                symbol: 'AAPL',
-                name: 'Apple Inc.',
-                price: 182.45,
-                change: 3.12,
-                changePercent: 1.74,
-                volume: 45123789,
-              },
-              {
-                symbol: 'MSFT',
-                name: 'Microsoft Corporation',
-                price: 342.15,
-                change: 5.67,
-                changePercent: 1.68,
-                volume: 23456123,
-              },
-              {
-                symbol: 'GOOGL',
-                name: 'Alphabet Inc.',
-                price: 139.87,
-                change: -2.34,
-                changePercent: -1.65,
-                volume: 18234567,
-              },
-              {
-                symbol: 'AMZN',
-                name: 'Amazon.com Inc.',
-                price: 178.23,
-                change: 1.89,
-                changePercent: 1.07,
-                volume: 34567234,
-              },
-            ],
-          });
-        }, 500);
-      });
-    }
-  },
+  getProposedTrades: async () => apiRequest<any>('/proposed-trades'),
+
+  approveProposal: async (data: { symbol: string; side: string; qty: number; est_price: number }) =>
+    apiRequest<any>('/approve', { method: 'POST', body: JSON.stringify(data) }),
+
+  getWatchList: async () => apiRequest<any>('/watchlist'),
+
+  getRisk: async () => apiRequest<any>('/risk'),
 };
