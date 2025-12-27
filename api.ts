@@ -142,14 +142,87 @@ export const api = {
 
   // Orders endpoint
   getOrders: async () => {
-    const data = await apiRequest<any>('/orders');
-    return Array.isArray(data) ? { orders: data } : data;
+    const raw = await apiRequest<any>('/orders');
+    const list = Array.isArray(raw) ? raw : (raw.orders ?? []);
+  
+    const orders = list.map((o: any) => {
+      const quantity = Number(o.quantity ?? o.qty ?? 0);
+      const filled = Number(o.filled ?? o.filled_qty ?? 0);
+  
+      // Prefer limit/stop/avg-fill prices if present
+      const limitPrice = o.limitPrice ?? o.limit_price;
+      const stopPrice = o.stopPrice ?? o.stop_price;
+      const avgFillPrice = o.avgFillPrice ?? o.filled_avg_price ?? o.avg_fill_price;
+  
+      const type = (o.type ?? "").toString().toUpperCase();
+      const side = (o.side ?? "").toString().toUpperCase();
+      const status = (o.status ?? "").toString().toUpperCase();
+      const openLike = new Set(["NEW", "ACCEPTED", "PENDING_NEW", "PARTIALLY_FILLED"]);
+      const finalStatus = openLike.has(status) ? "OPEN" : status;
+      const timestamp =
+        o.timestamp ??
+        o.created_at ??
+        o.submitted_at ??
+        o.updated_at ??
+        new Date().toISOString();
+  
+      return {
+        id: (o.id ?? "").toString(),
+        symbol: (o.symbol ?? "").toString(),
+        type: type || "—",
+        side: side || "—",
+        quantity,
+        limitPrice: limitPrice != null ? Number(limitPrice) : undefined,
+        stopPrice: stopPrice != null ? Number(stopPrice) : undefined,
+        avgFillPrice: avgFillPrice != null ? Number(avgFillPrice) : undefined,
+        status: status || "—",
+        filled,
+        timestamp: (timestamp ?? "").toString(),
+      };
+    });
+  
+    return { orders };
   },
-
-  // Orders with status filter
+  
   getOrdersWithStatus: async (status: 'all' | 'open' | 'closed' = 'all') => {
-    const data = await apiRequest<any>('/orders', { params: { status } });
-    return Array.isArray(data) ? { orders: data } : data;
+    const raw = await apiRequest<any>('/orders', { params: { status } });
+    const list = Array.isArray(raw) ? raw : (raw.orders ?? []);
+  
+    const orders = list.map((o: any) => {
+      const quantity = Number(o.quantity ?? o.qty ?? 0);
+      const filled = Number(o.filled ?? o.filled_qty ?? 0);
+  
+      const limitPrice = o.limitPrice ?? o.limit_price;
+      const stopPrice = o.stopPrice ?? o.stop_price;
+      const avgFillPrice = o.avgFillPrice ?? o.filled_avg_price ?? o.avg_fill_price;
+  
+      const type = (o.type ?? "").toString().toUpperCase();
+      const side = (o.side ?? "").toString().toUpperCase();
+      const st = (o.status ?? "").toString().toUpperCase();
+  
+      const timestamp =
+        o.timestamp ??
+        o.created_at ??
+        o.submitted_at ??
+        o.updated_at ??
+        new Date().toISOString();
+  
+      return {
+        id: (o.id ?? "").toString(),
+        symbol: (o.symbol ?? "").toString(),
+        type: type || "—",
+        side: side || "—",
+        quantity,
+        limitPrice: limitPrice != null ? Number(limitPrice) : undefined,
+        stopPrice: stopPrice != null ? Number(stopPrice) : undefined,
+        avgFillPrice: avgFillPrice != null ? Number(avgFillPrice) : undefined,
+        status: st || "—",
+        filled,
+        timestamp: (timestamp ?? "").toString(),
+      };
+    });
+  
+    return { orders };
   },
 
   // Watch list endpoint
