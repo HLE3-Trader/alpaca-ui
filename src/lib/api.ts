@@ -142,7 +142,20 @@ export const api = {
     return { orders };
   },
 
-  getProposedTrades: async () => apiRequest<any>('/proposed-trades'),
+  getProposedTrades: async () => {
+    const raw = await apiRequest<any>('/proposed-trades');
+    const list = Array.isArray(raw) ? raw : (raw?.proposals ?? []);
+  
+    const proposals = list.map((p: any) => ({
+      symbol: String(p.symbol ?? ''),
+      side: String(p.side ?? '').toLowerCase(), // buy | sell | hold
+      qty: Number(p.qty ?? 0),
+      est_price: p.est_price != null ? Number(p.est_price) : undefined,
+      reason: String(p.reason ?? ''),
+    }));
+  
+    return { proposals };
+  },
 
   approveProposal: async (data: { symbol: string; side: string; qty: number; est_price: number }) =>
     apiRequest<any>('/approve', { method: 'POST', body: JSON.stringify(data) }),
