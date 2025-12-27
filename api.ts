@@ -30,7 +30,8 @@ const headers = {
   });
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    const text = await response.text();
+    throw new Error(text || `API Error: ${response.status} ${response.statusText}`);
   }
 
   return await response.json();
@@ -48,11 +49,8 @@ export const api = {
   },
   // Positions endpoint - fetches real positions data
   getPositions: async () => {
-    try {
-      return await apiRequest<any>('/positions');
-    } catch (error) {
-      throw error;
-    }
+    const data = await apiRequest<any>('/positions');
+    return Array.isArray(data) ? { positions: data } : data;
   },
 
   // Risk endpoint - fetches real risk data
@@ -87,22 +85,14 @@ export const api = {
 
   // Orders endpoint
   getOrders: async () => {
-    try {
-      return await apiRequest<any>('/orders');
-    } catch (error) {
-      throw error;
-    }
+    const data = await apiRequest<any>('/orders');
+    return Array.isArray(data) ? { orders: data } : data;
   },
 
   // Orders with status filter
   getOrdersWithStatus: async (status: 'all' | 'open' | 'closed' = 'all') => {
-    try {
-      return await apiRequest<any>('/orders', {
-        params: { status },
-      });
-    } catch (error) {
-      throw error;
-    }
+    const data = await apiRequest<any>('/orders', { params: { status } });
+    return Array.isArray(data) ? { orders: data } : data;
   },
 
   // Watch list endpoint
