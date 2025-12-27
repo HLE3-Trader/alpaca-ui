@@ -52,36 +52,62 @@ export const api = {
   // Positions endpoint - fetches real positions data
   getPositions: async () => {
     const raw = await apiRequest<any>('/positions');
-    const positions = Array.isArray(raw) ? raw : (raw.positions ?? []);
+    const list = Array.isArray(raw) ? raw : (raw.positions ?? []);
   
-    const normalized = positions.map((p: any) => {
-      const qty = Number(p.qty ?? p.quantity ?? 0);
-      const avgPrice = Number(p.avg_entry_price ?? p.avgPrice ?? 0);
-      const currentPrice = Number(p.current_price ?? p.currentPrice ?? 0);
-      const marketValue = Number(p.market_value ?? p.marketValue ?? (qty * currentPrice));
-      const unrealizedPL = Number(p.unrealized_pl ?? p.unrealizedPL ?? 0);
-      const unrealizedPLPercent = Number(p.unrealized_plpc ?? p.unrealizedPLPercent ?? 0) * 100;
+    const positions = list.map((p: any, i: number) => {
+      const quantity = Number(p.quantity ?? p.qty ?? 0);
+  
+      const avgPrice = Number(
+        p.avgPrice ??
+        p.avg_price ??
+        p.avg_entry_price ?? // Alpaca
+        0
+      );
+  
+      const currentPrice = Number(
+        p.currentPrice ??
+        p.current_price ?? // Alpaca
+        0
+      );
+  
+      const marketValue = Number(
+        p.marketValue ??
+        p.market_value ?? // Alpaca
+        (quantity * currentPrice) ??
+        0
+      );
+  
+      const unrealizedPL = Number(
+        p.unrealizedPL ??
+        p.unrealized_pl ?? // Alpaca
+        0
+      );
+  
+      const unrealizedPLPercent =
+        p.unrealizedPLPercent != null
+          ? Number(p.unrealizedPLPercent)
+          : p.unrealized_pl_percent != null
+            ? Number(p.unrealized_pl_percent)
+            : p.unrealized_plpc != null // Alpaca (decimal, e.g. -0.005 => -0.5%)
+              ? Number(p.unrealized_plpc) * 100
+              : avgPrice && quantity
+                ? (unrealizedPL / (avgPrice * quantity)) * 100
+                : 0;
   
       return {
-        ...p,
-        // Common UI-friendly aliases:
-        quantity: qty,
+        id: p.id ?? p.asset_id ?? `pos-${i}`,
+        symbol: p.symbol ?? "",
+        name: p.name ?? p.symbol ?? "",
+        quantity,
         avgPrice,
         currentPrice,
         marketValue,
         unrealizedPL,
         unrealizedPLPercent,
-        // Keep canonical Alpaca-ish fields too:
-        qty: String(p.qty ?? qty),
-        avg_entry_price: String(p.avg_entry_price ?? avgPrice),
-        current_price: String(p.current_price ?? currentPrice),
-        market_value: String(p.market_value ?? marketValue),
-        unrealized_pl: String(p.unrealized_pl ?? unrealizedPL),
-        unrealized_plpc: String(p.unrealized_plpc ?? (unrealizedPLPercent / 100)),
       };
     });
   
-    return { positions: normalized };
+    return { positions };
   },
 
   // Risk endpoint - fetches real risk data
