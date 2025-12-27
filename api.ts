@@ -1,5 +1,6 @@
 // Path B: UI talks ONLY to the secure Vercel proxy (no secrets in browser)
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://alpaca-proxy-flame.vercel.app/api';
+const API_BASE =
+  (import.meta.env.VITE_API_BASE || 'https://alpaca-proxy-flame.vercel.app/api') + '/';
 interface ApiOptions extends RequestInit {
   params?: Record<string, string>;
 }
@@ -11,7 +12,8 @@ async function apiRequest<T>(
   const { params, ...fetchOptions } = options;
 
   // Build URL with query parameters
-  const url = new URL(endpoint, API_BASE);
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+  const url = new URL(cleanEndpoint, API_BASE);
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
       url.searchParams.append(key, value);
