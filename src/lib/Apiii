@@ -1,0 +1,10 @@
+export const api = {
+  getAccount: async () => { /* ... */ },
+  getPositions: async () => { /* ... */ },
+  getOrders: async () => { /* ... */ },
+  getOrdersWithStatus: async (status: 'all'|'open'|'closed' = 'all') => { /* ... */ },
+  getProposedTrades: async () => { /* ... */ },
+  approveProposal: async (data: any) => { /* ... */ },
+  getWatchList: async () => { /* ... */ },
+  getRisk: async () => { /* ... */ },
+};
