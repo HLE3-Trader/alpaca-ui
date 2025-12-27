@@ -176,7 +176,9 @@ export function ProposedTrades() {
                         {proposal.qty.toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-right text-white">
-                        ${proposal.est_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {proposal.est_price != null
+                        ? `$${proposal.est_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : "—"}
                       </td>
                       <td className="px-4 py-3 text-sm text-zinc-400">
                         {proposal.reason || 'N/A'}
