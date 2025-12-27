@@ -54,18 +54,59 @@ export function Positions() {
       }
 
       // Normalize field names
-      const normalizedPositions = positionData.map((pos: any, index: number) => ({
-        id: pos.id || `pos-${index}`,
-        symbol: pos.symbol || '',
-        name: pos.name || '',
-        quantity: pos.quantity || pos.qty || 0,
-        avgPrice: pos.avgPrice || pos.avg_price || 0,
-        currentPrice: pos.currentPrice || pos.current_price || 0,
-        marketValue: pos.marketValue || pos.market_value || 0,
-        unrealizedPL: pos.unrealizedPL || pos.unrealized_pl || 0,
-        unrealizedPLPercent: pos.unrealizedPLPercent || pos.unrealized_pl_percent || 
-          (pos.avgPrice || pos.avg_price ? ((pos.unrealizedPL || pos.unrealized_pl || 0) / ((pos.avgPrice || pos.avg_price) * (pos.quantity || pos.qty || 1))) * 100 : 0),
-      }));
+  const normalizedPositions = positionData.map((pos: any, index: number) => {
+    const quantity = Number(pos.quantity ?? pos.qty ?? 0);
+  
+    const avgPrice = Number(
+      pos.avgPrice ??
+        pos.avg_price ??
+        pos.avg_entry_price ??   // ✅ Alpaca
+        0
+    );
+  
+    const currentPrice = Number(
+      pos.currentPrice ??
+        pos.current_price ??     // ✅ Alpaca
+        0
+    );
+  
+    const marketValue = Number(
+      pos.marketValue ??
+        pos.market_value ??      // ✅ Alpaca
+        (quantity * currentPrice) ??
+        0
+    );
+  
+    const unrealizedPL = Number(
+      pos.unrealizedPL ??
+        pos.unrealized_pl ??     // ✅ Alpaca
+        0
+    );
+  
+    // Alpaca gives unrealized_plpc as a decimal string (e.g. "-0.0050" => -0.50%)
+    const unrealizedPLPercent =
+      pos.unrealizedPLPercent != null
+        ? Number(pos.unrealizedPLPercent)
+        : pos.unrealized_pl_percent != null
+          ? Number(pos.unrealized_pl_percent)
+          : pos.unrealized_plpc != null       // ✅ Alpaca
+            ? Number(pos.unrealized_plpc) * 100
+            : avgPrice && quantity
+              ? (unrealizedPL / (avgPrice * quantity)) * 100
+              : 0;
+  
+    return {
+      id: pos.id || `pos-${index}`,
+      symbol: pos.symbol || '',
+      name: pos.name || '',
+      quantity,
+      avgPrice,
+      currentPrice,
+      marketValue,
+      unrealizedPL,
+      unrealizedPLPercent,
+    };
+  });
 
       setPositions(normalizedPositions);
     } catch (error: any) {
