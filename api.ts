@@ -140,7 +140,6 @@ export const api = {
     }
   },
 
-  // Orders endpoint
   getOrders: async () => {
     const raw = await apiRequest<any>('/orders');
     const list = Array.isArray(raw) ? raw : (raw.orders ?? []);
@@ -149,76 +148,72 @@ export const api = {
       const quantity = Number(o.quantity ?? o.qty ?? 0);
       const filled = Number(o.filled ?? o.filled_qty ?? 0);
   
-      // Prefer limit/stop/avg-fill prices if present
-      const limitPrice = o.limitPrice ?? o.limit_price;
-      const stopPrice = o.stopPrice ?? o.stop_price;
-      const avgFillPrice = o.avgFillPrice ?? o.filled_avg_price ?? o.avg_fill_price;
+      const type = String(o.type ?? o.order_type ?? '').toUpperCase();
+      const side = String(o.side ?? '').toUpperCase();
   
-      const type = (o.type ?? "").toString().toUpperCase();
-      const side = (o.side ?? "").toString().toUpperCase();
-      const status = (o.status ?? "").toString().toUpperCase();
-      const openLike = new Set(["NEW", "ACCEPTED", "PENDING_NEW", "PARTIALLY_FILLED"]);
-      const finalStatus = openLike.has(status) ? "OPEN" : status;
+      const rawStatus = String(o.status ?? '').toUpperCase();
+  
+      // Normalize Alpaca statuses → UI statuses
+      const openLike = new Set(['NEW', 'ACCEPTED', 'PENDING_NEW', 'PARTIALLY_FILLED']);
+      const status = openLike.has(rawStatus) ? 'OPEN' : rawStatus;
+  
       const timestamp =
-        o.timestamp ??
-        o.created_at ??
+        o.filled_at ??
         o.submitted_at ??
-        o.updated_at ??
+        o.created_at ??
         new Date().toISOString();
   
       return {
-        id: (o.id ?? "").toString(),
-        symbol: (o.symbol ?? "").toString(),
-        type: type || "—",
-        side: side || "—",
+        id: String(o.id),
+        symbol: String(o.symbol),
+        type: type || '—',
+        side: side || '—',
         quantity,
-        limitPrice: limitPrice != null ? Number(limitPrice) : undefined,
-        stopPrice: stopPrice != null ? Number(stopPrice) : undefined,
-        avgFillPrice: avgFillPrice != null ? Number(avgFillPrice) : undefined,
-        status: status || "—",
+        limitPrice: o.limit_price != null ? Number(o.limit_price) : undefined,
+        stopPrice: o.stop_price != null ? Number(o.stop_price) : undefined,
+        avgFillPrice: o.filled_avg_price != null ? Number(o.filled_avg_price) : undefined,
+        status,
         filled,
-        timestamp: (timestamp ?? "").toString(),
+        timestamp: String(timestamp),
       };
     });
   
     return { orders };
   },
   
-  getOrdersWithStatus: async (status: 'all' | 'open' | 'closed' = 'all') => {
-    const raw = await apiRequest<any>('/orders', { params: { status } });
+  getOrdersWithStatus: async (statusFilter: 'all' | 'open' | 'closed' = 'all') => {
+    const raw = await apiRequest<any>('/orders', { params: { status: statusFilter } });
     const list = Array.isArray(raw) ? raw : (raw.orders ?? []);
   
     const orders = list.map((o: any) => {
       const quantity = Number(o.quantity ?? o.qty ?? 0);
       const filled = Number(o.filled ?? o.filled_qty ?? 0);
   
-      const limitPrice = o.limitPrice ?? o.limit_price;
-      const stopPrice = o.stopPrice ?? o.stop_price;
-      const avgFillPrice = o.avgFillPrice ?? o.filled_avg_price ?? o.avg_fill_price;
+      const type = String(o.type ?? o.order_type ?? '').toUpperCase();
+      const side = String(o.side ?? '').toUpperCase();
   
-      const type = (o.type ?? "").toString().toUpperCase();
-      const side = (o.side ?? "").toString().toUpperCase();
-      const st = (o.status ?? "").toString().toUpperCase();
+      const rawStatus = String(o.status ?? '').toUpperCase();
+      const openLike = new Set(['NEW', 'ACCEPTED', 'PENDING_NEW', 'PARTIALLY_FILLED']);
+      const status = openLike.has(rawStatus) ? 'OPEN' : rawStatus;
   
       const timestamp =
-        o.timestamp ??
-        o.created_at ??
+        o.filled_at ??
         o.submitted_at ??
-        o.updated_at ??
+        o.created_at ??
         new Date().toISOString();
   
       return {
-        id: (o.id ?? "").toString(),
-        symbol: (o.symbol ?? "").toString(),
-        type: type || "—",
-        side: side || "—",
+        id: String(o.id),
+        symbol: String(o.symbol),
+        type: type || '—',
+        side: side || '—',
         quantity,
-        limitPrice: limitPrice != null ? Number(limitPrice) : undefined,
-        stopPrice: stopPrice != null ? Number(stopPrice) : undefined,
-        avgFillPrice: avgFillPrice != null ? Number(avgFillPrice) : undefined,
-        status: st || "—",
+        limitPrice: o.limit_price != null ? Number(o.limit_price) : undefined,
+        stopPrice: o.stop_price != null ? Number(o.stop_price) : undefined,
+        avgFillPrice: o.filled_avg_price != null ? Number(o.filled_avg_price) : undefined,
+        status,
         filled,
-        timestamp: (timestamp ?? "").toString(),
+        timestamp: String(timestamp),
       };
     });
   
