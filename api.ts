@@ -51,8 +51,37 @@ export const api = {
   },
   // Positions endpoint - fetches real positions data
   getPositions: async () => {
-    const data = await apiRequest<any>('/positions');
-    return Array.isArray(data) ? { positions: data } : data;
+    const raw = await apiRequest<any>('/positions');
+    const positions = Array.isArray(raw) ? raw : (raw.positions ?? []);
+  
+    const normalized = positions.map((p: any) => {
+      const qty = Number(p.qty ?? p.quantity ?? 0);
+      const avgPrice = Number(p.avg_entry_price ?? p.avgPrice ?? 0);
+      const currentPrice = Number(p.current_price ?? p.currentPrice ?? 0);
+      const marketValue = Number(p.market_value ?? p.marketValue ?? (qty * currentPrice));
+      const unrealizedPL = Number(p.unrealized_pl ?? p.unrealizedPL ?? 0);
+      const unrealizedPLPercent = Number(p.unrealized_plpc ?? p.unrealizedPLPercent ?? 0) * 100;
+  
+      return {
+        ...p,
+        // Common UI-friendly aliases:
+        quantity: qty,
+        avgPrice,
+        currentPrice,
+        marketValue,
+        unrealizedPL,
+        unrealizedPLPercent,
+        // Keep canonical Alpaca-ish fields too:
+        qty: String(p.qty ?? qty),
+        avg_entry_price: String(p.avg_entry_price ?? avgPrice),
+        current_price: String(p.current_price ?? currentPrice),
+        market_value: String(p.market_value ?? marketValue),
+        unrealized_pl: String(p.unrealized_pl ?? unrealizedPL),
+        unrealized_plpc: String(p.unrealized_plpc ?? (unrealizedPLPercent / 100)),
+      };
+    });
+  
+    return { positions: normalized };
   },
 
   // Risk endpoint - fetches real risk data
