@@ -161,6 +161,6 @@ export const api = {
     apiRequest<any>('/approve', { method: 'POST', body: JSON.stringify(data) }),
 
   getWatchList: async () => apiRequest<any>('/watchlist'),
-
+  getRegime: async () => apiRequest<any>('/regime'),
   getRisk: async () => apiRequest<any>('/risk'),
 };
