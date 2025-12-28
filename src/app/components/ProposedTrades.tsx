@@ -7,7 +7,10 @@ interface ProposedTrade {
   symbol: string;
   side: string;
   qty: number;
-  est_price: number;
+  est_price?: number;
+  confidence?: number;                 // 0..1 or 0..100
+  horizon?: string;                    // optional
+  signals?: Record<string, number>;    // optional
   reason?: string;
   [key: string]: any;
 }
@@ -26,10 +29,9 @@ export function ProposedTrades() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await api.getProposedTrades();
-      
-      // Handle response - could be array or object with proposals property
+
       if (Array.isArray(response)) {
         setProposals(response);
       } else if (response?.proposals) {
@@ -40,7 +42,7 @@ export function ProposedTrades() {
         setProposals([]);
       }
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to load proposed trades';
+      const errorMessage = error?.message || 'Failed to load proposed trades';
       setError(errorMessage);
       toast.error(errorMessage);
       console.error('Proposed trades fetch error:', error);
@@ -49,42 +51,48 @@ export function ProposedTrades() {
     }
   };
 
+  // Normalize confidence to 0..1
+  const getConfidence = (p: ProposedTrade) => {
+    if (p.confidence != null) {
+      const c = Number(p.confidence);
+      const normalized = c > 1 ? c / 100 : c; // accepts 0..100 or 0..1
+      return Math.max(0, Math.min(1, normalized));
+    }
+
+    // Fallback: simple confidence based on action + sizing
+    const side = String(p.side ?? '').toLowerCase();
+    if (side === 'hold') return 0.40;
+    if ((side === 'buy' || side === 'sell') && (p.qty ?? 0) > 0) return 0.65;
+    return 0.50;
+  };
+
   const handleApprove = async (proposal: ProposedTrade) => {
-    // Create a unique key for this proposal
     const key = `${proposal.symbol}-${proposal.side}`;
-    
-    // Mark as submitting
     setSubmittingSymbols(prev => new Set(prev).add(key));
 
     try {
-      // Submit approval
       await api.approveProposal({
         symbol: proposal.symbol,
         side: proposal.side,
         qty: proposal.qty,
-        est_price: proposal.est_price,
+        est_price: proposal.est_price ?? 0,
       });
 
-      // Show success toast
       toast.success('Order submitted');
 
-      // Refresh orders and positions in the background
       Promise.all([
         api.getOrders().catch(err => console.error('Failed to refresh orders:', err)),
         api.getPositions().catch(err => console.error('Failed to refresh positions:', err)),
       ]);
 
-      // Remove the proposal from the list (optimistic update)
-      setProposals(prev => prev.filter(p => 
-        !(p.symbol === proposal.symbol && p.side === proposal.side)
-      ));
-
+      setProposals(prev =>
+        prev.filter(p => !(p.symbol === proposal.symbol && p.side === proposal.side))
+      );
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to approve trade';
+      const errorMessage = error?.message || 'Failed to approve trade';
       toast.error(errorMessage);
       console.error('Approve trade error:', error);
     } finally {
-      // Remove from submitting set
       setSubmittingSymbols(prev => {
         const next = new Set(prev);
         next.delete(key);
@@ -153,10 +161,12 @@ export function ProposedTrades() {
                   <th className="text-left px-4 py-3 text-xs text-zinc-400">Side</th>
                   <th className="text-right px-4 py-3 text-xs text-zinc-400">Qty</th>
                   <th className="text-right px-4 py-3 text-xs text-zinc-400">Est Price</th>
+                  <th className="text-right px-4 py-3 text-xs text-zinc-400">Conf</th>
                   <th className="text-left px-4 py-3 text-xs text-zinc-400">Reason</th>
                   <th className="text-center px-4 py-3 text-xs text-zinc-400">Action</th>
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-zinc-800">
                 {proposals.map((proposal, index) => {
                   const key = `${proposal.symbol}-${proposal.side}`;
@@ -164,25 +174,50 @@ export function ProposedTrades() {
                   const isHold = proposal.side.toLowerCase() === 'hold';
                   const isBuyOrSell = ['buy', 'sell'].includes(proposal.side.toLowerCase());
 
+                  const conf = getConfidence(proposal); // 0..1
+                  const confPct = Math.round(conf * 100);
+
                   return (
                     <tr key={index} className="hover:bg-zinc-800/30 transition-colors">
                       <td className="px-4 py-3 text-white">{proposal.symbol}</td>
+
                       <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-1 text-xs border rounded uppercase ${getSideBadgeColor(proposal.side)}`}>
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs border rounded uppercase ${getSideBadgeColor(
+                            proposal.side
+                          )}`}
+                        >
                           {proposal.side}
                         </span>
                       </td>
+
                       <td className="px-4 py-3 text-right text-zinc-300">
-                        {proposal.qty.toLocaleString()}
+                        {Number(proposal.qty ?? 0).toLocaleString()}
                       </td>
+
                       <td className="px-4 py-3 text-right text-white">
-                      {proposal.est_price != null
-                        ? `$${proposal.est_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : "—"}
+                        {proposal.est_price != null
+                          ? `$${Number(proposal.est_price).toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}`
+                          : '—'}
                       </td>
+
+                      {/* ✅ Confidence cell */}
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-zinc-300 text-sm tabular-nums">{confPct}%</span>
+                          <div className="w-20 h-1 bg-zinc-800 rounded overflow-hidden">
+                            <div className="h-1 bg-blue-500" style={{ width: `${confPct}%` }} />
+                          </div>
+                        </div>
+                      </td>
+
                       <td className="px-4 py-3 text-sm text-zinc-400">
                         {proposal.reason || 'N/A'}
                       </td>
+
                       <td className="px-4 py-3 text-center">
                         {isHold ? (
                           <div className="flex items-center justify-center gap-1 text-zinc-500 text-sm">
